@@ -22,7 +22,7 @@ API_URL = os.getenv(
     "LLM_API_URL",
     "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
 )
-MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("LLM_MODEL", "gemini-3.8-flash")
 
 
 def ask(system: str, user: str, temperature: float = 0.2) -> str:
