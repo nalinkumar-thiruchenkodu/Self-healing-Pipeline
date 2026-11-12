@@ -5,7 +5,7 @@ OpenAI-compatible endpoint. Configure with environment variables:
 
   LLM_API_KEY  (required, store it as a GitHub Actions secret)
   LLM_API_URL  (optional, default: Gemini OpenAI-compatible endpoint)
-  LLM_MODEL    (optional, default: gemini-2.5-flash)
+  LLM_MODEL    (optional, default: gemini-3.8-flash)
 
 To switch provider, change only these values. Example for Groq:
   LLM_API_URL=https://api.groq.com/openai/v1/chat/completions
