@@ -29,7 +29,7 @@ jobs:
 
       - name: Ask the LLM for a review
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
         run: python scripts/review.py
 
       - name: Post (or update) the review comment and label the PR
