@@ -1,0 +1,44 @@
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+# Least privilege: read code, comment and label PRs, call GitHub Models.
+# There is deliberately NO permission or step that can merge.
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  models: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build the diff (code and pipeline files only)
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git diff "origin/${BASE_REF}...HEAD" -- \
+            app tests requirements.txt Dockerfile scripts .github > pr.diff
+
+      - name: Ask the LLM for a review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/review.py
+
+      - name: Post (or update) the review comment and label the PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh label create ai-reviewed --color 0e8a16 \
+            --description "Reviewed by the AI bot" --force || true
+          gh pr comment "$PR_NUMBER" --body-file review.md --edit-last \
+            || gh pr comment "$PR_NUMBER" --body-file review.md
+          gh pr edit "$PR_NUMBER" --add-label ai-reviewed

@@ -1,0 +1,89 @@
+name: Self-Heal
+
+# When CI fails on main, try to fix it and open a pull request.
+# The bot NEVER merges. A human reviews and merges.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+  models: read
+
+concurrency:
+  group: self-heal
+  cancel-in-progress: false
+
+jobs:
+  heal:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    env:
+      # Optional HEAL_TOKEN (a PAT) makes CI run on the fix PR.
+      # Without it the default token is used and the PR is created without CI.
+      GH_TOKEN: ${{ secrets.HEAL_TOKEN || secrets.GITHUB_TOKEN }}
+      RUN_URL: ${{ github.event.workflow_run.html_url }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+    steps:
+      - name: Guard - skip if a fix PR is already open
+        id: guard
+        run: |
+          open=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open \
+            --json headRefName \
+            --jq '[.[] | select(.headRefName | startswith("heal/"))] | length')
+          echo "open=$open" >> "$GITHUB_OUTPUT"
+          echo "Open heal PRs: $open"
+
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.open == '0'
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          token: ${{ secrets.HEAL_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        if: steps.guard.outputs.open == '0'
+        with:
+          python-version: "3.12"
+
+      - name: Try to heal (layer 1 tools, then the LLM)
+        id: heal
+        if: steps.guard.outputs.open == '0'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/heal.py
+
+      - name: Open a fix PR
+        if: steps.guard.outputs.open == '0' && steps.heal.outputs.healed == 'true'
+        run: |
+          if git diff --quiet -- app tests requirements.txt; then
+            echo "Nothing changed (flaky failure?). Stopping."
+            exit 0
+          fi
+          BRANCH="heal/run-${RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -A app tests requirements.txt
+          git commit -m "fix(ci): automated fix for failed run ${RUN_ID}"
+          git push origin "$BRANCH"
+          { echo "Triggered by failed run: ${RUN_URL}"; echo; cat heal_summary.md; } > pr_body.md
+          gh label create ai-healed --color 8250df \
+            --description "Fix proposed by the self-healing bot" --force || true
+          gh pr create --base main --head "$BRANCH" \
+            --title "AI fix: CI failure on main (run ${RUN_ID})" \
+            --body-file pr_body.md --label ai-healed
+
+      - name: Could not heal - open an issue for a human
+        if: steps.guard.outputs.open == '0' && steps.heal.outputs.healed != 'true'
+        run: |
+          { echo "The self-healing bot could not fix this failure."; \
+            echo "Failed run: ${RUN_URL}"; echo; cat heal_summary.md; } > issue_body.md
+          gh issue create --title "CI red on main: auto-fix failed (run ${RUN_ID})" \
+            --body-file issue_body.md
