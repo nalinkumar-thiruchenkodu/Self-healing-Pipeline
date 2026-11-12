@@ -49,7 +49,7 @@ def ask(system: str, user: str, temperature: float = 0.2) -> str:
             API_URL, data=json.dumps(payload).encode("utf-8"), headers=headers
         )
         try:
-            with urllib.request.urlopen(request, timeout=90) as response:
+            with urllib.request.urlopen(request, timeout=180) as response:
                 raw = response.read().decode("utf-8", errors="replace")
                 status = response.status
             print(f"[llm] model={MODEL} HTTP {status}, {len(raw)} bytes")
