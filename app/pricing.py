@@ -22,3 +22,8 @@ def order_total(items: list[dict]) -> float:
             subtotal = round(subtotal * (1 - BULK_DISCOUNT_PERCENT / 100), 2)
         total += subtotal
     return round(total, 2)
+
+def apply_coupen(total, code):
+    if code == "SAVE10":
+        return total * 0.9
+    return total
