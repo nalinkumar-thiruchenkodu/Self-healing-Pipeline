@@ -1,6 +1,15 @@
-"""Tiny LLM helper shared by review.py and heal.py (GitHub Models, stdlib only).
+"""Tiny LLM helper shared by review.py and heal.py (stdlib only).
 
-Authentication is the workflow's GITHUB_TOKEN (the job needs `models: read`).
+Works with any OpenAI-compatible chat API. Defaults to Google Gemini's
+OpenAI-compatible endpoint. Configure with environment variables:
+
+  LLM_API_KEY  (required, store it as a GitHub Actions secret)
+  LLM_API_URL  (optional, default: Gemini OpenAI-compatible endpoint)
+  LLM_MODEL    (optional, default: gemini-2.5-flash)
+
+To switch provider, change only these values. Example for Groq:
+  LLM_API_URL=https://api.groq.com/openai/v1/chat/completions
+  LLM_MODEL=llama-3.3-70b-versatile
 """
 
 import json
@@ -9,12 +18,19 @@ import time
 import urllib.error
 import urllib.request
 
-API_URL = "https://models.github.ai/inference/chat/completions"
-MODEL = os.getenv("LLM_MODEL", "openai/gpt-4o-mini")
+API_URL = os.getenv(
+    "LLM_API_URL",
+    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+)
+MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash")
 
 
 def ask(system: str, user: str, temperature: float = 0.2) -> str:
     """Send one prompt, return the model's text. Retries on rate limits."""
+    api_key = os.getenv("LLM_API_KEY")
+    if not api_key:
+        raise RuntimeError("LLM_API_KEY is not set (add it as a repository secret)")
+
     payload = {
         "model": MODEL,
         "temperature": temperature,
@@ -25,9 +41,7 @@ def ask(system: str, user: str, temperature: float = 0.2) -> str:
     }
     headers = {
         "Content-Type": "application/json",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+        "Authorization": f"Bearer {api_key}",
     }
     last_error = None
     for attempt in range(3):
@@ -52,3 +66,4 @@ def ask(system: str, user: str, temperature: float = 0.2) -> str:
                 raise
         time.sleep(5 * (attempt + 1))
     raise last_error
+    
